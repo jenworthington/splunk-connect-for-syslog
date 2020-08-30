@@ -1,6 +1,11 @@
-# Cisco IOS
+# Cisco IOS AND General Syslog
 {{- /* The following provides a unique port source configuration if env var(s) are set */}}
-{{- $context := dict "port_id" "CISCO_IOS" "parser" "cisco_parser" }}
+{{- $context := dict "port_id" "CISCO_IOS" "parser" "no_parse" }}
+{{- tmpl.Exec "t/source_network.t" $context }}
+
+# Cisco APIC
+{{- /* The following provides a unique port source configuration if env var(s) are set */}}
+{{- $context := dict "port_id" "CISCO_APIC" "parser" "no_parse" }}
 {{- tmpl.Exec "t/source_network.t" $context }}
 
 filter f_cisco_syslog{
@@ -10,7 +15,8 @@ rewrite set_cisco_syslog{
     set("cisco_syslog" value("fields.sc4s_syslog_format"));
 };
 filter f_is_cisco_syslog{
-    match("cisco_syslog" value("fields.sc4s_syslog_format"))
+    #match("cisco_syslog" value("fields.sc4s_syslog_format"))
+    message(' %(?<cisco_facility>[A-Z0-9\-\_]+)-(?<cisco_severity>[0-7])-(?<cisco_mnemonic>[^\: ]+)')
 };
 
 parser cisco-parser-ex{
@@ -151,6 +157,12 @@ parser cisco-parser-ex{
         };
     };
 };
+# Cisco APIC
+filter f_cisco_apic {
+    message('%LOG_LOCAL\d-\d-');
+    or message('%LOG_-\d-');
+    or message('%ACLLOG-\d-ACLLOG_PKTLOG');
+};
 
 log {
     junction {
@@ -161,6 +173,13 @@ log {
             flags (final);
 	    };
 {{- end}}
+{{- if or (or (getenv  (print "SC4S_LISTEN_CISCO_APIC_TCP_PORT")) (getenv  (print "SC4S_LISTEN_CISCO_APIC_UDP_PORT"))) (getenv  (print "SC4S_LISTEN_CISCO_APIC_TLS_PORT")) }}
+        channel {
+        # Listen on the specified dedicated port(s) for CISCO_APIC traffic
+            source (s_CISCO_APIC);
+            flags (final);
+	    };
+{{- end}}
         channel {
         # Listen on the default port (typically 514) for CISCO_IOS traffic
             source (s_DEFAULT);
@@ -168,19 +187,45 @@ log {
             flags(final);
         };
     };
-
-    rewrite {
-        set("cisco_ios", value("fields.sc4s_vendor_product"));
-        guess-time-zone();
-        r_set_splunk_dest_default(sourcetype("cisco:ios"))
-    };
-    parser { p_add_context_splunk(key("cisco_ios")); };
-    parser (compliance_meta_by_source);
     if {
-        filter{ program('^%')};
-        rewrite { set("$(template ${.splunk.sc4s_template} $(template t_program_nopid_msg))" value("MSG")); };
+        parser(cisco-parser-ex);
+        rewrite(set_cisco_syslog);
+    };
+    if {
+        filter {
+            message('%ACLLOG-\d-ACLLOG_PKTLOG')
+        };
+        rewrite {
+            set("cisco_APIC_acl", value("fields.sc4s_vendor_product"));
+            r_set_splunk_dest_default(sourcetype("cisco:apic:acl"),  template("t_hdr_msg"))
+        };
+        parser { p_add_context_splunk(key("cisco_apic_acl")); };
+        parser (compliance_meta_by_source);
+        rewrite { set("$(template ${.splunk.sc4s_template} $(template t_hdr_msg))" value("MSG")); };
+
+    } elif {
+        filter(f_cisco_apic);
+        rewrite {
+            set("cisco_APIC_events", value("fields.sc4s_vendor_product"));
+            r_set_splunk_dest_default(sourcetype("cisco:apic:events"),  template("t_hdr_msg"))
+        };
+        parser { p_add_context_splunk(key("cisco_apic_events")); };
+        parser (compliance_meta_by_source);
+        rewrite { set("$(template ${.splunk.sc4s_template} $(template t_hdr_msg))" value("MSG")); };
     } else {
-        rewrite { set("$(template ${.splunk.sc4s_template} $(template t_msg_only))" value("MSG")); };
+        rewrite {
+            set("cisco_ios", value("fields.sc4s_vendor_product"));
+            guess-time-zone();
+            r_set_splunk_dest_default(sourcetype("cisco:ios"))
+        };
+        parser { p_add_context_splunk(key("cisco_ios")); };
+        parser (compliance_meta_by_source);
+        if {
+            filter{ program('^%')};
+            rewrite { set("$(template ${.splunk.sc4s_template} $(template t_program_nopid_msg))" value("MSG")); };
+        } else {
+            rewrite { set("$(template ${.splunk.sc4s_template} $(template t_msg_only))" value("MSG")); };
+        };
     };
     
 

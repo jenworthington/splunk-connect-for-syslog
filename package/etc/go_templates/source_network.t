@@ -101,9 +101,6 @@ source s_{{ .port_id }} {
                 syslog-parser(flags(assume-utf8, syslog-protocol));
             };
         rewrite(set_rfc5424_noversion);
-{{ else if eq .parser "cisco_parser" }}
-        parser (cisco-parser-ex);
-        rewrite(set_cisco_syslog);
 {{ else if eq .parser "cisco_meraki_parser" }}
         parser (p_cisco_meraki);
         rewrite(set_rfc5424_epochtime);
@@ -149,6 +146,12 @@ source s_{{ .port_id }} {
         rewrite(set_tcp_json);    
 {{ else }}
         if {
+            filter(f_rfc3164_strict);
+            parser {
+                syslog-parser(time-zone({{- getenv "SC4S_DEFAULT_TIMEZONE" "GMT"}}) flags(assume-utf8, guess-timezone));
+            };
+            rewrite(set_rfc3164_strict);
+        } elif {
             filter(f_citrix_netscaler_message);
             parser { 
 {{- if (conv.ToBool (getenv "SC4S_SOURCE_CITRIX_NETSCALER_USEALT_DATE_FORMAT" "no")) }}        
@@ -213,9 +216,6 @@ source s_{{ .port_id }} {
             parser (p_cisco_meraki);
             rewrite(set_rfc5424_epochtime);
         } elif {
-            parser(cisco-parser-ex);
-            rewrite(set_cisco_syslog);
-        } elif {
             filter(f_cisco_ucm_message);
             parser (p_cisco_ucm_date);
             rewrite (r_cisco_ucm_message);   
@@ -233,32 +233,32 @@ source s_{{ .port_id }} {
                 };
             rewrite(set_rfc5424_noversion);
         } else {
-            parser {
-                syslog-parser(time-zone({{- getenv "SC4S_DEFAULT_TIMEZONE" "GMT"}}) flags(assume-utf8, guess-timezone));
-            };
-            rewrite(set_rfc3164);
-            if {
-                filter { message('^{') and message('}$') };
-                parser {
-                    json-parser(
-                        prefix('.json.')
-                    );
-                };
-                rewrite(set_rfc3164_json);  
-            } elif {
-                filter { match('^{' value('LEGACY_MSGHDR')) and message('}$') };
-                parser {
-                    json-parser(
-                        prefix('.json.')
-                        template('${LEGACY_MSGHDR}${MSG}')
-                    );
-                };
-                rewrite {
-                    set('${LEGACY_MSGHDR}${MSG}' value('MSG'));
-                    unset(value('LEGACY_MSGHDR'));
-                };
-                rewrite(set_rfc3164_json);              
-            };
+        #    parser {
+        #        syslog-parser(time-zone({{- getenv "SC4S_DEFAULT_TIMEZONE" "GMT"}}) flags(assume-utf8, guess-timezone));
+        #    };
+        #    rewrite(set_rfc3164);
+        #    if {
+        #        filter { message('^{') and message('}$') };
+        #        parser {
+        #            json-parser(
+        #                prefix('.json.')
+        #            );
+        #        };
+        #        rewrite(set_rfc3164_json);  
+        #    } elif {
+        #        filter { match('^{' value('LEGACY_MSGHDR')) and message('}$') };
+        #        parser {
+        #            json-parser(
+        #                prefix('.json.')
+        #                template('${LEGACY_MSGHDR}${MSG}')
+        #            );
+        #        };
+        #        rewrite {
+        #            set('${LEGACY_MSGHDR}${MSG}' value('MSG'));
+        #            unset(value('LEGACY_MSGHDR'));
+        #        };
+        #        rewrite(set_rfc3164_json);              
+        #    };
         };
 {{ end }}
         rewrite(r_set_splunk_default);
