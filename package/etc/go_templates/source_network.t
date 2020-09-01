@@ -83,23 +83,6 @@ source s_{{ .port_id }} {
                 syslog-parser(time-zone({{- getenv "SC4S_DEFAULT_TIMEZONE" "GMT"}}) flags(assume-utf8, guess-timezone));
             };
             rewrite(set_rfc3164_strict);
-        } elif {            
-            filter(f_rfc3164_no_host);
-            parser {
-                syslog-parser(time-zone({{- getenv "SC4S_DEFAULT_TIMEZONE" "GMT"}}) flags(assume-utf8, guess-timezone, no-hostname));
-            };
-            rewrite(set_rfc3164_no_host);            
-        } elif {
-            filter(f_legacy_alt_ts_dd_mm_yy_with_host);
-            parser { 
-{{- if (conv.ToBool (getenv "SC4S_SOURCE_CITRIX_NETSCALER_USEALT_DATE_FORMAT" "no")) }}        
-                date-parser-nofilter(format('%m/%d/%Y:%H:%M:%S')
-{{- else }}        
-                date-parser-nofilter(format('%d/%m/%Y:%H:%M:%S')
-{{- end }}
-                template("$2"));
-            };
-            rewrite(r_legacy_alt_ts_dd_mm_yy_with_host);
        } elif {
             #JSON over IP its not syslog but it can work
             filter { message('^{') and message('}$') };
@@ -130,9 +113,26 @@ source s_{{ .port_id }} {
             filter(f_rfc3164_version);
             rewrite(set_rfc3164_no_version_string);
             parser {
-                    syslog-parser(time-zone({{- getenv "SC4S_DEFAULT_TIMEZONE" "GMT"}}) flags(assume-utf8, guess-timezone, store-raw-message));
+                    syslog-parser(time-zone({{- getenv "SC4S_DEFAULT_TIMEZONE" "GMT"}}) flags(assume-utf8, guess-timezone));
                 };
             rewrite(set_rfc3164_version);
+        } elif {            
+            filter(f_rfc3164_no_host);
+            parser {
+                syslog-parser(time-zone({{- getenv "SC4S_DEFAULT_TIMEZONE" "GMT"}}) flags(assume-utf8, guess-timezone, no-hostname));
+            };
+            rewrite(set_rfc3164_no_host);            
+        } elif {
+            filter(f_legacy_alt_ts_dd_mm_yy_with_host);
+            parser { 
+{{- if (conv.ToBool (getenv "SC4S_SOURCE_CITRIX_NETSCALER_USEALT_DATE_FORMAT" "no")) }}        
+                date-parser-nofilter(format('%m/%d/%Y:%H:%M:%S')
+{{- else }}        
+                date-parser-nofilter(format('%d/%m/%Y:%H:%M:%S')
+{{- end }}
+                template("$2"));
+            };
+            rewrite(r_legacy_alt_ts_dd_mm_yy_with_host);
         } elif {
             filter(f_rfc5424_noversion);
             parser {
@@ -140,10 +140,10 @@ source s_{{ .port_id }} {
                 };
             rewrite(set_rfc5424_noversion);
         } else {
-            parser {
-                syslog-parser(time-zone({{- getenv "SC4S_DEFAULT_TIMEZONE" "GMT"}}) flags(assume-utf8, guess-timezone));
-            };
-            rewrite(set_rfc3164);
+            #parser {
+            #    syslog-parser(time-zone({{- getenv "SC4S_DEFAULT_TIMEZONE" "GMT"}}) flags(assume-utf8, guess-timezone, store-raw-message));
+            #};
+            rewrite(set_rfcviolation);
             if {
                 filter { message('^{') and message('}$') };
                 parser {
