@@ -47,6 +47,41 @@ parser cisco-parser-ex{
             filter(f_cisco_parse_mnemonic);
         };
         if {
+            #Cisco UCM Format
+            filter(f_cisco_ucm);
+            filter(f_cisco_ucm_message);
+            rewrite {
+                    set("$7" value("MESSAGE") );
+            };
+            if {
+                filter {
+                    message(
+                        'Node ?ID(?:\:|\=)([^ \]]+)'
+                        flags(store-matches)
+                    );
+                };
+                rewrite {
+                    set("$1" value("HOST") );
+                };
+            } elif {
+                filter {
+                    message(
+                        ' on node ([^ ]+\. |[^ ]+ )'
+                        flags(store-matches)
+                    );
+                };
+                rewrite {
+                    set("$1" value("HOST") );
+                };
+            };
+            parser {
+                date-parser-nofilter(format(
+                    '%b %d %H:%M:%S.%f',
+                    '%b %d %Y %I:%M:%S %p.%f'
+                    )
+                    template("$3"));
+            };            
+        } elif {
             #Cisco IOS-XR devices with node-id format
             filter {                
                 match('^<\d*>(?:(\d+)\: )?(RP\/\d*\/RSP\d*\/CPU\d*:)?(?:([^\: ]+):)(?:(\*|\.)?(\w\w\w {1,2}\d{1,2} \d{1,2}:\d{1,2}:\d{1,2}\.\d+))? :  ?([^\[]{1,30}\[\d*\]: ?\%[^\: ]+\:? ?.*)' value('RAWMSG') flags(store-matches));
@@ -102,40 +137,6 @@ parser cisco-parser-ex{
                 )
                 template("$2"));
             };
-        } elif {
-            #Cisco UCM Format
-            filter(f_cisco_ucm_message);
-            rewrite {
-                    set("$7" value("MESSAGE") );
-            };
-            if {
-                filter {
-                    message(
-                        'Node ?ID(?:\:|\=)([^ \]]+)'
-                        flags(store-matches)
-                    );
-                };
-                rewrite {
-                    set("$1" value("HOST") );
-                };
-            } elif {
-                filter {
-                    message(
-                        ' on node ([^ ]+\. |[^ ]+ )'
-                        flags(store-matches)
-                    );
-                };
-                rewrite {
-                    set("$1" value("HOST") );
-                };
-            };
-            parser {
-                date-parser-nofilter(format(
-                    '%b %d %H:%M:%S.%f',
-                    '%b %d %Y %I:%M:%S %p.%f'
-                    )
-                    template("$3"));
-            };            
         } elif {
             #Cisco IOS Other
             filter {

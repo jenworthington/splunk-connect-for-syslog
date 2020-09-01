@@ -100,20 +100,7 @@ source s_{{ .port_id }} {
                 template("$2"));
             };
             rewrite(r_citrix_netscaler_message);
-        } elif {
-            filter(f_citrix_netscaler_sdx_message);
-            parser { date-parser-nofilter(format('%b %d %H:%M:%S')
-                template("$2"));
-            };
-            rewrite(r_citrix_netscaler_sdx_message);        
-        } elif {
-            filter(f_citrix_netscaler_sdx_AAAmessage);
-            parser { 
-                date-parser-nofilter(format('%b %d %H:%M:%S')
-                template("$2"));
-            };
-            rewrite(r_citrix_netscaler_sdx_AAAmessage);                            
-        } elif {
+       } elif {
             filter(f_f5_bigip_message);
             rewrite{
                 set('$2' 
