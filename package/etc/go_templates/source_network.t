@@ -124,8 +124,8 @@ source s_{{ .port_id }} {
                 };
             rewrite(set_rfc5424_strict);            
         } elif {
-            parser (p_cisco_meraki);
-            rewrite(set_rfc5424_epochtime);
+            parser (p_rfc3164_version_epochtime);
+            rewrite(set_rfc3164_version_epochtime);
         } elif {
             filter(f_rfc3164_version);
             rewrite(set_rfc3164_no_version_string);
