@@ -90,7 +90,7 @@ source s_{{ .port_id }} {
             };
             rewrite(set_rfc3164_no_host);            
         } elif {
-            filter(f_citrix_netscaler_message);
+            filter(f_legacy_alt_ts_dd_mm_yy_with_host);
             parser { 
 {{- if (conv.ToBool (getenv "SC4S_SOURCE_CITRIX_NETSCALER_USEALT_DATE_FORMAT" "no")) }}        
                 date-parser-nofilter(format('%m/%d/%Y:%H:%M:%S')
@@ -99,7 +99,7 @@ source s_{{ .port_id }} {
 {{- end }}
                 template("$2"));
             };
-            rewrite(r_citrix_netscaler_message);
+            rewrite(r_legacy_alt_ts_dd_mm_yy_with_host);
        } elif {
             #JSON over IP its not syslog but it can work
             filter { message('^{') and message('}$') };
