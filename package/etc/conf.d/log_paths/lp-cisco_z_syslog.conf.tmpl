@@ -1,3 +1,8 @@
+# Cisco ACE
+{{- /* The following provides a unique port source configuration if env var(s) are set */}}
+{{- $context := dict "port_id" "CISCO_ACE" "parser" "common" }}
+{{- tmpl.Exec "t/source_network.t" $context }}
+
 # Cisco IOS AND General Syslog
 {{- /* The following provides a unique port source configuration if env var(s) are set */}}
 {{- $context := dict "port_id" "CISCO_IOS" "parser" "no_parse" }}
@@ -8,23 +13,28 @@
 {{- $context := dict "port_id" "CISCO_APIC" "parser" "no_parse" }}
 {{- tmpl.Exec "t/source_network.t" $context }}
 
-filter f_cisco_syslog{
-    match("cisco_syslog", value("fields.sc4s_vendor_product") type(glob));
+# Cisco UCM
+{{- /* The following provides a unique port source configuration if env var(s) are set */}}
+{{- $context := dict "port_id" "CISCO_UCM" "parser" "cisco_ucm" }}
+{{- tmpl.Exec "t/source_network.t" $context }}
+
+#Cisco's syslog is unique in the level of non conformance to custom and standard
+filter f_is_cisco_syslog{
+    match(
+        #'%(?<cisco_facility>[A-Z0-9\-\_]+)-(?<cisco_severity>[0-7])-(?<cisco_mnemonic>[^\: ]+)'
+        '%[A-Z0-9\-\_]+-[0-7]-[^\: ]+'
+        template('$(template t_hdr_msg)')
+    )
 };
 rewrite set_cisco_syslog{
     set("cisco_syslog" value("fields.sc4s_syslog_format"));
 };
-filter f_is_cisco_syslog{
-    #match("cisco_syslog" value("fields.sc4s_syslog_format"))
-    message(' %(?<cisco_facility>[A-Z0-9\-\_]+)-(?<cisco_severity>[0-7])-(?<cisco_mnemonic>[^\: ]+)')
-};
-
 parser cisco-parser-ex{
     channel {
         if {
             #Cisco IOS-XR devices with node-id format
             filter {                
-                message('^<\d*>(?:(\d+)\: )?(RP\/\d*\/RSP\d*\/CPU\d*:)?(?:([^\: ]+):)(?:(\*|\.)?(\w\w\w {1,2}\d{1,2} \d{1,2}:\d{1,2}:\d{1,2}\.\d+))? :  ?([^\[]{1,30}\[\d*\]: ?\%[^\: ]+\:? ?.*)' flags(store-matches));
+                match('^<\d*>(?:(\d+)\: )?(RP\/\d*\/RSP\d*\/CPU\d*:)?(?:([^\: ]+):)(?:(\*|\.)?(\w\w\w {1,2}\d{1,2} \d{1,2}:\d{1,2}:\d{1,2}\.\d+))? :  ?([^\[]{1,30}\[\d*\]: ?\%[^\: ]+\:? ?.*)' value('RAWMSG') flags(store-matches));
             };
 
             parser { date-parser-nofilter(format(
@@ -56,7 +66,8 @@ parser cisco-parser-ex{
         } elif {
             # Cisco Nexus Switch
             filter {
-                message('^<(?<pri>\d*)>:? ?20\d\d (\w\w\w \d+ \d\d:\d\d:\d\d(?:.\d{3,3})?)(?: [A-Z]{3}:)? ([^ ]+)? ?((%[^\: ]+)\:? ?.*)'
+                match('^<(?<pri>\d*)>:? ?20\d\d (\w\w\w \d+ \d\d:\d\d:\d\d(?:.\d{3,3})?)(?: [A-Z]{3}:)? ([^ ]+)? ?((%[^\: ]+)\:? ?.*)'
+                value('RAWMSG') 
                 flags(store-matches));
             };            
             rewrite {
@@ -81,7 +92,8 @@ parser cisco-parser-ex{
         } elif {
             #Cisco IOS Other
             filter {
-                message('^<\d*> ?(?:(\d+)\: )?(?:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9]): )?(?:(\d+): )?(?:(\d\d:\d\d:\d\d|\d{1,6} \d{1,2}))?(?:(\*|\.)?(?:20\d\d )?((?:\w\w\w {1,2}\d{1,2} (?:\d{2,4} )?\d\d:\d\d:\d\d)(?:\.\d{3,6})?( [AP]M)?)( [A-Za-z]{3,3} )?)? ?((?:\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*(?:[A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9]))? ?: (last message repeated \d* times|(\%[^\: ]+)\:? ?.*)'
+                match('^<\d*> ?(?:(\d+)\: )?(?:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9]): )?(?:(\d+): )?(?:(\d\d:\d\d:\d\d|\d{1,6} \d{1,2}))?(?:(\*|\.)?(?:20\d\d )?((?:\w\w\w {1,2}\d{1,2} (?:\d{2,4} )?\d\d:\d\d:\d\d)(?:\.\d{3,6})?( [AP]M)?)( [A-Za-z]{3,3} )?)? ?((?:\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*(?:[A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9]))? ?: (last message repeated \d* times|(\%[^\: ]+)\:? ?.*)'
+                value('RAWMSG') 
                 flags(store-matches));
             };            
 
@@ -133,7 +145,10 @@ parser cisco-parser-ex{
         } else {
             #Cisco AireOS format
             filter {                
-                message('^<\d*>(?:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9]): )(?:[^:]*: )((?:\w\w\w {1,2}\d{1,2} (?:\d{2,4} )?\d\d:\d\d:\d\d)(?:\.\d{3,6})): ((\%[^\: ]+)\:? ?.*)' flags(store-matches));
+                match('^<\d*>(?:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9]): )(?:[^:]*: )((?:\w\w\w {1,2}\d{1,2} (?:\d{2,4} )?\d\d:\d\d:\d\d)(?:\.\d{3,6})): ((\%[^\: ]+)\:? ?.*)'
+                value('RAWMSG') 
+                flags(store-matches)
+                );
             };
 
             parser { date-parser-nofilter(format(
@@ -157,6 +172,17 @@ parser cisco-parser-ex{
         };
     };
 };
+# Cisco ACE
+filter f_cisco_ace {
+    message('^%ACE-\d+-\d{1,10}: ') or
+    match('^%ACE-\d+-\d{1,10}:', value("LEGACY_MSGHDR"));
+};
+
+filter f_cisco_ace_nohost {
+    match('^%ACE-\d+-\d{1,10}:', value("LEGACY_MSGHDR"));
+};
+
+
 # Cisco APIC
 filter f_cisco_apic {
     message('%LOG_LOCAL\d-\d-');
@@ -164,12 +190,44 @@ filter f_cisco_apic {
     or message('%ACLLOG-\d-ACLLOG_PKTLOG');
 };
 
+# Cisco UCM
+filter f_cisco_ucm {
+    message("^%UC\_")
+    or 
+    message("^%CCM\_")
+};
+
+filter f_cisco_ucm_message {
+    message(
+#        '^(<\d{1,3}>)\d*: (?:([^:]+): )?(.*[A|P]M\.\d{3}) (\w{3}) : (%.*)'
+#       '^(<\d{1,3}>)\d*: (?:([^:]+): )?(.*) : (%.*)'
+        '^(<\d{1,3}>)\d*: (?:([^:]+): )?(\w{3} \d{1,2} (\d{4} )?\d\d:\d\d:\d\d(?: [AP]M)?(\.\d{3,6})?)([^:]*): (%[A-Z].*)'
+        flags(store-matches)
+    );
+};
+
+parser p_cisco_ucm_date {
+                date-parser-nofilter(format(
+                    '%b %d %H:%M:%S.%f',
+                    '%b %d %Y %I:%M:%S %p.%f'
+                    )
+                    template("$3"));
+};
+
+rewrite r_cisco_ucm_message {
+    set("cisco_ucm" value("fields.sc4s_syslog_format"));
+    set("cisco_ucm" value("fields.sc4s_vendor_product"));
+    set("$HOST_FROM" value("HOST") );
+    set("$2" value("HOST") condition(match("^..." template("${2}"))) );
+    set("$7" value("MESSAGE"));
+};
+
 log {
     junction {
-{{- if or (or (getenv  (print "SC4S_LISTEN_CISCO_IOS_TCP_PORT")) (getenv  (print "SC4S_LISTEN_CISCO_IOS_UDP_PORT"))) (getenv  (print "SC4S_LISTEN_CISCO_IOS_TLS_PORT")) }}
+{{- if or (or (getenv  (print "SC4S_LISTEN_CISCO_ACE_TCP_PORT")) (getenv  (print "SC4S_LISTEN_CISCO_ACE_UDP_PORT"))) (getenv  (print "SC4S_LISTEN_CISCO_ACE_TLS_PORT")) }}
         channel {
-        # Listen on the specified dedicated port(s) for CISCO_IOS traffic
-            source (s_CISCO_IOS);
+        # Listen on the specified dedicated port(s) for CISCO_ACE traffic
+            source (s_CISCO_ACE);
             flags (final);
 	    };
 {{- end}}
@@ -180,6 +238,21 @@ log {
             flags (final);
 	    };
 {{- end}}
+{{- if or (or (getenv  (print "SC4S_LISTEN_CISCO_IOS_TCP_PORT")) (getenv  (print "SC4S_LISTEN_CISCO_IOS_UDP_PORT"))) (getenv  (print "SC4S_LISTEN_CISCO_IOS_TLS_PORT")) }}
+        channel {
+        # Listen on the specified dedicated port(s) for CISCO_IOS traffic
+            source (s_CISCO_IOS);
+            flags (final);
+	    };
+{{- end}}
+{{- if or (or (getenv  (print "SC4S_LISTEN_CISCO_UCM_TCP_PORT")) (getenv  (print "SC4S_LISTEN_CISCO_UCM_UDP_PORT"))) (getenv  (print "SC4S_LISTEN_CISCO_UCM_TLS_PORT")) }}
+        channel {
+        # Listen on the specified dedicated port(s) for CISCO_UCM traffic
+            source (s_CISCO_UCM);
+            flags (final);
+	    };
+{{- end}}
+
         channel {
         # Listen on the default port (typically 514) for CISCO_IOS traffic
             source (s_DEFAULT);
@@ -210,6 +283,46 @@ log {
             r_set_splunk_dest_default(sourcetype("cisco:apic:events"),  template("t_hdr_msg"))
         };
         parser { p_add_context_splunk(key("cisco_apic_events")); };
+        parser (compliance_meta_by_source);
+        rewrite { set("$(template ${.splunk.sc4s_template} $(template t_hdr_msg))" value("MSG")); };
+    } elif {
+        filter(f_cisco_ace);
+        rewrite {
+            set("HOST", value("PROGRAM"));
+            set("cisco_ace", value("fields.sc4s_vendor_product"));
+            r_set_splunk_dest_default(sourcetype("cisco:ace"))
+        };
+        parser {p_add_context_splunk(key("cisco_ace")); };
+        parser (compliance_meta_by_source);
+    } elif {
+         filter(f_cisco_ucm);
+         if {
+            filter {
+                message(
+                    'Node ?ID(?:\:|\=)([^ \]]+)'
+                    flags(store-matches)
+                );
+            };
+            rewrite {
+                set("$1" value("HOST") );
+            };
+        } elif {
+            filter {
+                message(
+                    ' on node ([^ ]+\. |[^ ]+ )'
+                    flags(store-matches)
+                );
+            };
+            rewrite {
+                set("$1" value("HOST") );
+            };
+        };
+
+        rewrite {
+            set("cisco_ucm", value("fields.sc4s_vendor_product"));
+            r_set_splunk_dest_default(sourcetype("cisco:ucm"))
+        };
+        parser {p_add_context_splunk(key("cisco_ucm")); };
         parser (compliance_meta_by_source);
         rewrite { set("$(template ${.splunk.sc4s_template} $(template t_hdr_msg))" value("MSG")); };
     } else {
